@@ -45,6 +45,12 @@ export function verifyBearerToken(request, expectedToken) {
   return auth.slice(7) === expectedToken;
 }
 
+export function verifyApiToken(request, expectedToken) {
+  // 兼容 OpenAI SDK（Authorization: Bearer）和 Anthropic SDK（x-api-key）
+  return verifyBearerToken(request, expectedToken) ||
+    request.headers.get('x-api-key') === expectedToken;
+}
+
 export function verifyBasicAuth(request, expectedPassword) {
   if (!expectedPassword) return false;
   const auth = request.headers.get('Authorization') || '';

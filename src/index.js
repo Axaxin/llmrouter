@@ -2,7 +2,7 @@
 import { handleRequest } from './router.js';
 import { handleAdmin } from './admin.js';
 import { getAccessToken, getAdminPassword } from './config.js';
-import { verifyBearerToken, verifyBasicAuth } from './utils.js';
+import { verifyApiToken, verifyBasicAuth } from './utils.js';
 import { UnauthorizedError } from './errors.js';
 
 const CORS_HEADERS = {
@@ -48,7 +48,7 @@ async function handleAdminWithAuth(request, env) {
 
 async function handleApiWithAuth(request, env, ctx) {
   const token = await getAccessToken(env);
-  if (!token || !verifyBearerToken(request, token)) {
+  if (!token || !verifyApiToken(request, token)) {
     return new UnauthorizedError('Invalid or missing access token').toResponse();
   }
   return handleRequest(request, env, ctx);
