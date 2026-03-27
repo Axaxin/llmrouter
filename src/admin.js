@@ -79,8 +79,10 @@ const ADMIN_HTML = `<!DOCTYPE html>
     body { font-family: system-ui, -apple-system, sans-serif; background: #f0f2f5; color: #1a1a1a; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
 
     /* Header */
-    .header { background: #1e293b; color: #fff; height: 52px; padding: 0 20px; display: flex; align-items: center; flex-shrink: 0; }
+    .header { background: #1e293b; color: #fff; height: 52px; padding: 0 20px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
     .header h1 { font-size: .95rem; font-weight: 600; letter-spacing: .01em; }
+    .logout-btn { background: none; border: 1px solid rgba(255,255,255,.25); color: rgba(255,255,255,.75); font-size: .78rem; padding: 4px 12px; border-radius: 5px; cursor: pointer; transition: all .15s; }
+    .logout-btn:hover { border-color: rgba(255,255,255,.6); color: #fff; background: rgba(255,255,255,.1); }
 
     /* Layout */
     .layout { display: flex; flex: 1; overflow: hidden; }
@@ -160,7 +162,7 @@ const ADMIN_HTML = `<!DOCTYPE html>
   </style>
 </head>
 <body>
-<header class="header"><h1>LLMBridge 管理面板</h1></header>
+<header class="header"><h1>LLMBridge 管理面板</h1><button class="logout-btn" onclick="logout()">退出登录</button></header>
 <div class="layout">
   <nav class="sidebar">
     <div class="sidebar-scroll">
@@ -390,6 +392,12 @@ const ADMIN_HTML = `<!DOCTYPE html>
     el.className = \`\${type} show\`;
     clearTimeout(_toastTimer);
     _toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
+  }
+
+  function logout() {
+    // Send invalid credentials to clear browser's Basic Auth cache, then reload to trigger login prompt
+    fetch('/admin', { credentials: 'omit', headers: { Authorization: 'Basic ' + btoa('__logout__:__logout__') } })
+      .finally(() => { location.reload(); });
   }
 
   loadConfig();
