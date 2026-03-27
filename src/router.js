@@ -48,7 +48,11 @@ export async function handleForwardRequest(request, env) {
     const baseUrl = platformConfig.baseUrls?.[protocol];
     if (!baseUrl) throw new InvalidPathError(`Protocol "${protocol}" not supported by platform "${platform}"`);
 
-    const targetUrl = baseUrl.replace(/\/$/, '') + apiPath;
+    // 若 baseUrl 末尾已含版本号（/v1、/v3 等），则 apiPath 只取版本后的部分，避免双叠
+    const strippedApiPath = /\/v\d+\/?$/.test(baseUrl)
+      ? apiPath.replace(/^\/v\d+/, '')
+      : apiPath;
+    const targetUrl = baseUrl.replace(/\/$/, '') + strippedApiPath;
     const forwardBody = { ...body, model: modelConfig.internalName || modelName };
 
     const headers = new Headers();
