@@ -2,6 +2,15 @@
 import { getConfig, setConfig, setAccessToken } from './config.js';
 
 export async function handleAdmin(request, env) {
+  try {
+    return await _handleAdmin(request, env);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Internal error';
+    return Response.json({ error: { message: msg, type: 'api_error' } }, { status: 500 });
+  }
+}
+
+async function _handleAdmin(request, env) {
   const url = new URL(request.url);
   const pathname = url.pathname;
 
@@ -112,7 +121,7 @@ const ADMIN_HTML = `<!DOCTYPE html>
     let config = {};
 
     async function loadConfig() {
-      const res = await fetch('/admin/api/config');
+      const res = await fetch('/admin/api/config', { credentials: 'include' });
       config = await res.json();
       renderPlatforms();
     }
@@ -214,6 +223,7 @@ const ADMIN_HTML = `<!DOCTYPE html>
       try {
         const res = await fetch('/admin/api/config', {
           method: 'PUT',
+          credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(collectConfig()),
         });
@@ -232,6 +242,7 @@ const ADMIN_HTML = `<!DOCTYPE html>
       try {
         const res = await fetch('/admin/api/token', {
           method: 'PUT',
+          credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ token }),
         });

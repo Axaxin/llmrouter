@@ -46,6 +46,7 @@ export function verifyBearerToken(request, expectedToken) {
 }
 
 export function verifyBasicAuth(request, expectedPassword) {
+  if (!expectedPassword) return false;
   const auth = request.headers.get('Authorization') || '';
   if (!auth.startsWith('Basic ')) return false;
   const decoded = atob(auth.slice(6));

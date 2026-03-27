@@ -7,6 +7,7 @@ import {
   ApiKeyMissingError,
   ConfigNotFoundError,
   InvalidPathError,
+  InvalidModelError,
 } from './errors.js';
 
 export async function handleRequest(request, env, ctx) {
@@ -24,7 +25,12 @@ export async function handleForwardRequest(request, env) {
     const url = new URL(request.url);
     const { protocol, apiPath } = parseRequestPath(url.pathname);
 
-    const body = await request.json();
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      throw new InvalidModelError('(unparseable body)');
+    }
     const { platform, modelName } = parseModelTag(body.model);
 
     const platforms = await getConfig(env);
