@@ -14,6 +14,14 @@ async function _handleAdmin(request, env) {
   const url = new URL(request.url);
   const pathname = url.pathname;
 
+  // Logout: always return 401 to clear browser's cached Basic Auth credentials
+  if (pathname === '/admin/logout') {
+    return new Response(
+      '<html><head><meta http-equiv="refresh" content="1;url=/admin"></head><body style="font-family:sans-serif;padding:40px;color:#64748b">已退出，正在跳转...</body></html>',
+      { status: 401, headers: { 'WWW-Authenticate': 'Basic realm="LLMBridge Admin"', 'Content-Type': 'text/html; charset=utf-8' } }
+    );
+  }
+
   if (pathname === '/admin' || pathname === '/admin/') {
     return new Response(ADMIN_HTML, {
       headers: { 'Content-Type': 'text/html; charset=utf-8' },
@@ -395,9 +403,7 @@ const ADMIN_HTML = `<!DOCTYPE html>
   }
 
   function logout() {
-    // Send invalid credentials to clear browser's Basic Auth cache, then reload to trigger login prompt
-    fetch('/admin', { credentials: 'omit', headers: { Authorization: 'Basic ' + btoa('__logout__:__logout__') } })
-      .finally(() => { location.reload(); });
+    location.href = '/admin/logout';
   }
 
   loadConfig();
