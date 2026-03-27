@@ -1,8 +1,8 @@
 // src/index.js
 import { handleRequest } from './router.js';
-import { handleAdmin } from './admin.js';
-import { getAccessToken, getAdminPassword } from './config.js';
-import { verifyApiToken, verifyBasicAuth } from './utils.js';
+import { handleAdmin, verifyAdminSession } from './admin.js';
+import { getAccessToken } from './config.js';
+import { verifyApiToken } from './utils.js';
 import { UnauthorizedError } from './errors.js';
 
 const CORS_HEADERS = {
@@ -39,9 +39,13 @@ export default {
 };
 
 async function handleAdminWithAuth(request, env) {
-  const password = getAdminPassword(env);
-  if (!verifyBasicAuth(request, password)) {
-    return new UnauthorizedError().toResponse('Basic');
+  const url = new URL(request.url);
+  // Login and logout are public — no session required
+  if (url.pathname.startsWith('/admin/login') || url.pathname === '/admin/logout') {
+    return handleAdmin(request, env);
+  }
+  if (!await verifyAdminSession(request, env)) {
+    return new Response(null, { status: 302, headers: { 'Location': '/admin/login' } });
   }
   return handleAdmin(request, env);
 }

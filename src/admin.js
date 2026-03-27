@@ -1,5 +1,27 @@
 // src/admin.js
-import { getConfig, setConfig, setAccessToken } from './config.js';
+import { getConfig, setConfig, setAccessToken, getAdminPassword } from './config.js';
+
+const SESSION_COOKIE = 'admin_sid';
+
+export async function makeSessionToken(password) {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw', enc.encode(password),
+    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, enc.encode('llmbridge-admin-v1'));
+  return btoa(String.fromCharCode(...new Uint8Array(sig)));
+}
+
+export async function verifyAdminSession(request, env) {
+  const password = getAdminPassword(env);
+  if (!password) return false;
+  const cookie = request.headers.get('Cookie') || '';
+  const match = cookie.match(/(?:^|;\s*)admin_sid=([^;]+)/);
+  if (!match) return false;
+  const expected = await makeSessionToken(password);
+  return match[1] === expected;
+}
 
 export async function handleAdmin(request, env) {
   try {
@@ -13,15 +35,26 @@ export async function handleAdmin(request, env) {
 async function _handleAdmin(request, env) {
   const url = new URL(request.url);
   const pathname = url.pathname;
+  const method = request.method;
 
-  // Logout: always return 401 to clear browser's cached Basic Auth credentials
-  if (pathname === '/admin/logout') {
-    return new Response(
-      '<html><head><meta http-equiv="refresh" content="1;url=/admin"></head><body style="font-family:sans-serif;padding:40px;color:#64748b">已退出，正在跳转...</body></html>',
-      { status: 401, headers: { 'WWW-Authenticate': 'Basic realm="LLMBridge Admin"', 'Content-Type': 'text/html; charset=utf-8' } }
-    );
+  // Login (public)
+  if (pathname === '/admin/login' || pathname === '/admin/login/') {
+    if (method === 'GET') return loginPage();
+    if (method === 'POST') return handleLogin(request, env);
   }
 
+  // Logout (public) — clear cookie and redirect
+  if (pathname === '/admin/logout') {
+    return new Response(null, {
+      status: 302,
+      headers: {
+        'Location': '/admin/login',
+        'Set-Cookie': `${SESSION_COOKIE}=; Path=/admin; HttpOnly; Secure; SameSite=Strict; Max-Age=0`,
+      },
+    });
+  }
+
+  // Admin panel HTML
   if (pathname === '/admin' || pathname === '/admin/') {
     return new Response(ADMIN_HTML, {
       headers: { 'Content-Type': 'text/html; charset=utf-8' },
@@ -29,15 +62,45 @@ async function _handleAdmin(request, env) {
   }
 
   if (pathname === '/admin/api/config') {
-    if (request.method === 'GET') return handleGetConfig(env);
-    if (request.method === 'PUT') return handlePutConfig(request, env);
+    if (method === 'GET') return handleGetConfig(env);
+    if (method === 'PUT') return handlePutConfig(request, env);
   }
 
-  if (pathname === '/admin/api/token' && request.method === 'PUT') {
+  if (pathname === '/admin/api/token' && method === 'PUT') {
     return handlePutToken(request, env);
   }
 
   return new Response('Not Found', { status: 404 });
+}
+
+async function handleLogin(request, env) {
+  const password = getAdminPassword(env);
+  if (!password) return new Response('ADMIN_PASSWORD not configured', { status: 500 });
+
+  let formData;
+  try { formData = await request.formData(); }
+  catch { return loginPage('请求格式错误'); }
+
+  if ((formData.get('password') || '') !== password) return loginPage('密码错误');
+
+  const token = await makeSessionToken(password);
+  return new Response(null, {
+    status: 302,
+    headers: {
+      'Location': '/admin',
+      'Set-Cookie': `${SESSION_COOKIE}=${token}; Path=/admin; HttpOnly; Secure; SameSite=Strict; Max-Age=86400`,
+    },
+  });
+}
+
+function loginPage(errorMsg = '') {
+  const html = errorMsg
+    ? LOGIN_HTML.replace('<!--ERROR-->', `<p class="error">${errorMsg}</p>`)
+    : LOGIN_HTML;
+  return new Response(html, {
+    status: errorMsg ? 401 : 200,
+    headers: { 'Content-Type': 'text/html; charset=utf-8' },
+  });
 }
 
 async function handleGetConfig(env) {
@@ -75,6 +138,40 @@ async function handlePutToken(request, env) {
   await setAccessToken(env, token);
   return Response.json({ ok: true });
 }
+
+const LOGIN_HTML = `<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LLMBridge 登录</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: #f0f2f5; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+    .card { background: #fff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,.1); padding: 36px 40px; width: 340px; }
+    .logo { font-size: 1.05rem; font-weight: 700; color: #1e293b; margin-bottom: 4px; }
+    .subtitle { font-size: .82rem; color: #94a3b8; margin-bottom: 28px; }
+    label { display: block; font-size: .78rem; font-weight: 500; color: #374151; margin-bottom: 5px; }
+    input[type=password] { width: 100%; padding: 9px 12px; border: 1px solid #d1d5db; border-radius: 7px; font-size: .875rem; outline: none; transition: border .15s, box-shadow .15s; }
+    input:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.12); }
+    button { width: 100%; margin-top: 16px; padding: 10px; background: #2563eb; color: #fff; border: none; border-radius: 7px; font-size: .875rem; font-weight: 500; cursor: pointer; transition: background .12s; }
+    button:hover { background: #1d4ed8; }
+    .error { color: #dc2626; font-size: .8rem; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">LLMBridge</div>
+    <div class="subtitle">管理面板</div>
+    <form method="POST" action="/admin/login">
+      <label>管理员密码</label>
+      <input type="password" name="password" autofocus placeholder="输入密码">
+      <!--ERROR-->
+      <button type="submit">登录</button>
+    </form>
+  </div>
+</body>
+</html>`;
 
 const ADMIN_HTML = `<!DOCTYPE html>
 <html lang="zh">

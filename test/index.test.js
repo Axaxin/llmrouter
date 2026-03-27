@@ -65,29 +65,58 @@ describe('Bearer token auth', () => {
   });
 });
 
-describe('Admin Basic Auth', () => {
-  it('returns 401 with WWW-Authenticate when no credentials', async () => {
+describe('Admin Session Auth', () => {
+  it('redirects to /admin/login when no session cookie', async () => {
     const req = new Request('http://worker/admin');
     const res = await worker.fetch(req, makeEnv(), {});
-    expect(res.status).toBe(401);
-    expect(res.headers.get('WWW-Authenticate')).toContain('Basic');
+    expect(res.status).toBe(302);
+    expect(res.headers.get('Location')).toBe('/admin/login');
   });
 
-  it('returns 401 for wrong password', async () => {
-    const creds = btoa('user:wrongpass');
-    const req = new Request('http://worker/admin', {
-      headers: { Authorization: `Basic ${creds}` },
+  it('returns login page for GET /admin/login', async () => {
+    const req = new Request('http://worker/admin/login');
+    const res = await worker.fetch(req, makeEnv(), {});
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toContain('text/html');
+  });
+
+  it('returns 401 for wrong password on POST /admin/login', async () => {
+    const req = new Request('http://worker/admin/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ password: 'wrongpass' }).toString(),
     });
     const res = await worker.fetch(req, makeEnv(), {});
     expect(res.status).toBe(401);
   });
 
-  it('allows access with correct password', async () => {
-    const creds = btoa('user:adminpass');
+  it('sets session cookie and redirects for correct password', async () => {
+    const req = new Request('http://worker/admin/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ password: 'adminpass' }).toString(),
+    });
+    const res = await worker.fetch(req, makeEnv(), {});
+    expect(res.status).toBe(302);
+    expect(res.headers.get('Location')).toBe('/admin');
+    expect(res.headers.get('Set-Cookie')).toContain('admin_sid=');
+  });
+
+  it('allows access with valid session cookie', async () => {
+    const { makeSessionToken } = await import('../src/admin.js');
+    const token = await makeSessionToken('adminpass');
     const req = new Request('http://worker/admin', {
-      headers: { Authorization: `Basic ${creds}` },
+      headers: { Cookie: `admin_sid=${token}` },
     });
     const res = await worker.fetch(req, makeEnv(), {});
     expect(res.status).toBe(200);
+  });
+
+  it('clears cookie and redirects on logout', async () => {
+    const req = new Request('http://worker/admin/logout');
+    const res = await worker.fetch(req, makeEnv(), {});
+    expect(res.status).toBe(302);
+    expect(res.headers.get('Location')).toBe('/admin/login');
+    expect(res.headers.get('Set-Cookie')).toContain('Max-Age=0');
   });
 });
